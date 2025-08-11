@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  codebase-qa:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - INDEX_DIR=/app/backend/app/data/indexes
+      - META_DB_URI=sqlite:////app/backend/app/data/meta.sqlite
+      - TEMP_DIR=/app/backend/app/data/temp
+    volumes:
+      - ./backend/app/data:/app/backend/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
