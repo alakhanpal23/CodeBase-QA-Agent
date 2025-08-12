@@ -62,8 +62,8 @@ class QueryService:
             
             # Retrieve relevant chunks
             retrieved_chunks = self.vector_store_manager.search_multiple(
-                question_embedding,
                 request.repo_ids,
+                question_embedding,
                 request.k
             )
             
@@ -89,8 +89,8 @@ class QueryService:
             if not is_valid and len(retrieved_chunks) < request.k + 2:
                 logger.warning("Answer lacks citations, retrying with more chunks")
                 more_chunks = self.vector_store_manager.search_multiple(
-                    question_embedding,
                     request.repo_ids,
+                    question_embedding,
                     request.k + 2
                 )
                 if more_chunks:
@@ -165,8 +165,8 @@ class QueryService:
         
         # Retrieve relevant chunks
         retrieved_chunks = self.vector_store_manager.search_multiple(
-            question_embedding,
             request.repo_ids,
+            question_embedding,
             request.k
         )
         
@@ -181,7 +181,7 @@ class QueryService:
             return []
         
         # Search for similar chunks
-        return self.vector_store_manager.search_multiple(text_embedding, repo_ids, k)
+        return self.vector_store_manager.search_multiple(repo_ids, text_embedding, k)
     
     async def get_chunk_content(self, repo_id: str, chunk_id: str) -> Optional[str]:
         """Get the content of a specific chunk."""

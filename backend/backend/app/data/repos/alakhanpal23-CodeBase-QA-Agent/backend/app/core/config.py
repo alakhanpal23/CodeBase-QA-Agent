@@ -16,9 +16,15 @@ class Settings(BaseSettings):
     openai_embedding_model: str = "text-embedding-3-small"
     
     # Embedding Configuration
-    embed_mode: str = "openai"  # Options: openai | local | mock
+    embed_mode: str = "auto"  # Options: openai | local | mock | auto
+    embed_model: str = "all-MiniLM-L6-v2"
     embed_batch_size: int = 64
     embedding_dimension: int = 1536
+    
+    # Production Configuration
+    environment: str = "development"  # development | production
+    enable_analytics: bool = True
+    max_concurrent_requests: int = 10
     
     # Storage Configuration
     index_dir: str = "backend/app/data/indexes"

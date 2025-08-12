@@ -1,315 +1,187 @@
 #!/usr/bin/env python3
 """
-Comprehensive test runner for all snippet functionality.
+Master Test Runner - Runs all test suites and provides comprehensive report
 """
 
-import os
-import sys
 import subprocess
+import sys
 import time
-import tempfile
-import shutil
-from pathlib import Path
+import os
+import json
+from datetime import datetime
+from typing import Dict, List, Any
 
-# Add backend to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'backend'))
+class TestSuite:
+    def __init__(self, name: str, script: str, description: str, required: bool = True):
+        self.name = name
+        self.script = script
+        self.description = description
+        self.required = required
+        self.result = None
+        self.duration = 0
+        self.output = ""
 
-def run_test_file(test_file, description):
-    """Run a single test file and return results."""
-    print(f"\n{'='*60}")
-    print(f"🧪 Running {description}")
-    print(f"{'='*60}")
-    
-    start_time = time.time()
-    
-    try:
-        # Try to run with pytest first
-        result = subprocess.run([
-            sys.executable, "-m", "pytest", test_file, "-v", "--tb=short"
-        ], capture_output=True, text=True, timeout=60)
-        
-        if result.returncode == 0:
-            print("✅ PASSED (pytest)")
-            print(result.stdout)
-            return True
-        else:
-            print("⚠️  pytest failed, trying direct execution...")
-            # Fall back to direct execution
-            result = subprocess.run([
-                sys.executable, test_file
-            ], capture_output=True, text=True, timeout=60)
-            
-            if result.returncode == 0:
-                print("✅ PASSED (direct)")
-                print(result.stdout)
-                return True
-            else:
-                print("❌ FAILED")
-                print("STDOUT:", result.stdout)
-                print("STDERR:", result.stderr)
-                return False
-                
-    except subprocess.TimeoutExpired:
-        print("❌ TIMEOUT (60s)")
-        return False
-    except Exception as e:
-        print(f"❌ ERROR: {e}")
-        return False
-    finally:
-        elapsed = time.time() - start_time
-        print(f"⏱️  Completed in {elapsed:.2f}s")
-
-def run_manual_tests():
-    """Run manual tests that don't require pytest."""
-    print(f"\n{'='*60}")
-    print("🧪 Running Manual Tests")
-    print(f"{'='*60}")
-    
-    tests_passed = 0
-    tests_total = 0
-    
-    # Test 1: Basic snippet extraction
-    print("\n1. Testing basic snippet extraction...")
-    tests_total += 1
-    
-    try:
-        from backend.app.services.snippets import extract_snippet
-        from backend.app.core.config import settings
-        
-        # Create temp test
-        temp_dir = tempfile.mkdtemp()
-        original_repos_dir = settings.repos_dir
-        settings.repos_dir = temp_dir
-        
-        try:
-            # Create test repo
-            repo_dir = os.path.join(temp_dir, "manual-test-repo")
-            os.makedirs(repo_dir, exist_ok=True)
-            
-            test_content = """def hello():
-    print("Hello, World!")
-    return "success"
-
-class TestClass:
-    def method(self):
-        return 42
-"""
-            
-            with open(os.path.join(repo_dir, "test.py"), "w") as f:
-                f.write(test_content)
-            
-            # Test extraction
-            result = extract_snippet("manual-test-repo", "test.py", 1, 3, context_lines=2)
-            
-            if result:
-                window_start, window_end, code = result
-                if "def hello():" in code and "print" in code:
-                    print("   ✅ Basic extraction works")
-                    tests_passed += 1
-                else:
-                    print("   ❌ Extraction content incorrect")
-            else:
-                print("   ❌ Extraction returned None")
-                
-        finally:
-            settings.repos_dir = original_repos_dir
-            shutil.rmtree(temp_dir)
-            
-    except Exception as e:
-        print(f"   ❌ Exception: {e}")
-    
-    # Test 2: Schema validation
-    print("\n2. Testing schema validation...")
-    tests_total += 1
-    
-    try:
-        from backend.app.core.schemas import QueryResponse, Citation, Snippet
-        
-        # Test creating response with snippets
-        citation = Citation(
-            path="test.py",
-            start=1,
-            end=5,
-            score=0.8,
-            content="def test(): pass"
-        )
-        
-        snippet = Snippet(
-            path="test.py",
-            start=1,
-            end=5,
-            window_start=1,
-            window_end=8,
-            code="def test():\n    pass\n"
-        )
-        
-        response = QueryResponse(
-            answer="Test answer",
-            citations=[citation],
-            snippets=[snippet],
-            latency_ms=100,
-            mode="mock"
-        )
-        
-        if (len(response.citations) == 1 and 
-            len(response.snippets) == 1 and
-            response.mode == "mock"):
-            print("   ✅ Schema validation works")
-            tests_passed += 1
-        else:
-            print("   ❌ Schema validation failed")
-            
-    except Exception as e:
-        print(f"   ❌ Exception: {e}")
-    
-    # Test 3: Configuration
-    print("\n3. Testing configuration...")
-    tests_total += 1
-    
-    try:
-        from backend.app.core.config import settings
-        
-        required_attrs = [
-            'snippet_context_lines',
-            'snippet_max_chars', 
-            'repos_dir',
-            'openai_model',
-            'embed_mode'
+class MasterTestRunner:
+    def __init__(self):
+        self.test_suites = [
+            TestSuite(
+                "Comprehensive API Tests",
+                "tests/test_comprehensive.py",
+                "End-to-end API functionality, security, and integration tests",
+                required=True
+            ),
+            TestSuite(
+                "Performance Tests",
+                "tests/test_performance.py",
+                "Load testing, concurrent requests, and performance benchmarks",
+                required=True
+            ),
+            TestSuite(
+                "Frontend E2E Tests",
+                "tests/test_frontend_e2e.py",
+                "Frontend user interface and user experience tests",
+                required=False  # Optional since it requires Selenium
+            ),
+            TestSuite(
+                "Basic Deployment Test",
+                "test_deployment.py",
+                "Basic deployment verification and smoke tests",
+                required=True
+            )
         ]
+        self.results = {}
+        self.start_time = None
+        self.end_time = None
+    
+    def check_prerequisites(self) -> bool:
+        """Check if all prerequisites are met"""
+        print("🔍 Checking Prerequisites...")
         
-        missing_attrs = [attr for attr in required_attrs if not hasattr(settings, attr)]
-        
-        if not missing_attrs:
-            print("   ✅ Configuration complete")
-            tests_passed += 1
-        else:
-            print(f"   ❌ Missing configuration: {missing_attrs}")
-            
-    except Exception as e:
-        print(f"   ❌ Exception: {e}")
-    
-    print(f"\n📊 Manual Tests: {tests_passed}/{tests_total} passed")
-    return tests_passed == tests_total
-
-def check_dependencies():
-    """Check if required dependencies are available."""
-    print("🔍 Checking dependencies...")
-    
-    required_modules = [
-        'fastapi',
-        'pydantic',
-        'pydantic_settings',
-        'uvicorn'
-    ]
-    
-    missing = []
-    for module in required_modules:
+        # Check if backend is running
         try:
-            __import__(module)
-            print(f"   ✅ {module}")
+            import requests
+            response = requests.get("http://localhost:8000/health", timeout=5)
+            if response.status_code == 200:
+                print("✅ Backend is running")
+            else:
+                print("❌ Backend is not responding correctly")
+                return False
+        except Exception as e:
+            print(f"❌ Backend is not accessible: {e}")
+            print("💡 Make sure to start the backend first:")
+            print("   cd backend && python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000")
+            return False
+        
+        # Check if frontend is running
+        try:
+            response = requests.get("http://localhost:3001", timeout=5)
+            if response.status_code == 200:
+                print("✅ Frontend is running")
+            else:
+                print("⚠️  Frontend may not be running (some tests will be skipped)")
+        except Exception as e:
+            print("⚠️  Frontend is not accessible (some tests will be skipped)")
+        
+        # Check Python dependencies
+        required_packages = ["requests", "concurrent.futures"]
+        for package in required_packages:
+            try:
+                __import__(package)
+                print(f"✅ {package} is available")
+            except ImportError:
+                print(f"❌ {package} is not installed")
+                return False
+        
+        # Check optional dependencies
+        try:
+            import selenium
+            print("✅ Selenium is available (frontend tests will run)")
         except ImportError:
-            print(f"   ❌ {module} (missing)")
-            missing.append(module)
-    
-    if missing:
-        print(f"\n⚠️  Missing dependencies: {missing}")
-        print("Install with: pip install " + " ".join(missing))
-        return False
-    
-    print("✅ All dependencies available")
-    return True
-
-def test_api_server():
-    """Test if API server can start."""
-    print("\n🚀 Testing API server startup...")
-    
-    try:
-        # Try to import the main app
-        from backend.app.main import app
-        print("   ✅ App imports successfully")
+            print("⚠️  Selenium not available (frontend tests will be skipped)")
+            # Mark frontend tests as not required
+            for suite in self.test_suites:
+                if "Frontend" in suite.name:
+                    suite.required = False
         
-        # Try to create test client
-        from fastapi.testclient import TestClient
-        client = TestClient(app)
+        return True
+    
+    def run_test_suite(self, suite: TestSuite) -> bool:
+        """Run a single test suite"""
+        print(f"\n🚀 Running {suite.name}...")
+        print(f"📝 {suite.description}")
+        print("-" * 50)
         
-        # Test health endpoint
-        response = client.get("/health")
-        if response.status_code == 200:
-            print("   ✅ Health endpoint works")
-            return True
-        else:
-            print(f"   ❌ Health endpoint failed: {response.status_code}")
+        if not os.path.exists(suite.script):
+            print(f"❌ Test script not found: {suite.script}")
+            suite.result = False
+            return False
+        
+        start_time = time.time()
+        
+        try:
+            # Run the test script
+            result = subprocess.run(
+                [sys.executable, suite.script],
+                capture_output=True,
+                text=True,
+                timeout=300  # 5 minute timeout per test suite
+            )
+            
+            suite.duration = time.time() - start_time
+            suite.output = result.stdout + result.stderr
+            suite.result = result.returncode == 0
+            
+            # Print the output
+            if result.stdout:
+                print(result.stdout)
+            if result.stderr:
+                print(result.stderr)
+            
+            if suite.result:
+                print(f"✅ {suite.name} completed successfully in {suite.duration:.1f}s")
+            else:
+                print(f"❌ {suite.name} failed after {suite.duration:.1f}s")
+            
+            return suite.result
+            
+        except subprocess.TimeoutExpired:
+            suite.duration = time.time() - start_time
+            suite.result = False
+            suite.output = "Test suite timed out after 5 minutes"
+            print(f"⏰ {suite.name} timed out after {suite.duration:.1f}s")
             return False
             
-    except Exception as e:
-        print(f"   ❌ Server test failed: {e}")
-        return False
-
-def main():
-    """Run all tests."""
-    print("🧪 CodeBase QA Agent - Comprehensive Test Suite")
-    print("=" * 60)
+        except Exception as e:
+            suite.duration = time.time() - start_time
+            suite.result = False
+            suite.output = str(e)
+            print(f"💥 {suite.name} failed with error: {e}")
+            return False
     
-    start_time = time.time()
-    
-    # Check dependencies first
-    if not check_dependencies():
-        print("\n❌ Cannot run tests without required dependencies")
-        return False
-    
-    # Test results tracking
-    test_results = {}
-    
-    # 1. Manual tests (always run)
-    test_results['manual'] = run_manual_tests()
-    
-    # 2. API server test
-    test_results['api_server'] = test_api_server()
-    
-    # 3. Test files (if they exist)
-    test_files = [
-        ("tests/test_snippets.py", "Snippet Extraction Tests"),
-        ("tests/test_api_integration.py", "API Integration Tests"),
-        ("tests/test_gpt4_compatibility.py", "GPT-4 Compatibility Tests"),
-        ("simple_snippet_test.py", "Simple Snippet Test")
-    ]
-    
-    for test_file, description in test_files:
-        if os.path.exists(test_file):
-            test_results[test_file] = run_test_file(test_file, description)
-        else:
-            print(f"\n⚠️  Skipping {description} - file not found: {test_file}")
-    
-    # Summary
-    print(f"\n{'='*60}")
-    print("📊 TEST SUMMARY")
-    print(f"{'='*60}")
-    
-    passed = sum(1 for result in test_results.values() if result)
-    total = len(test_results)
-    
-    for test_name, result in test_results.items():
-        status = "✅ PASS" if result else "❌ FAIL"
-        print(f"{status} {test_name}")
-    
-    elapsed = time.time() - start_time
-    print(f"\n⏱️  Total time: {elapsed:.2f}s")
-    print(f"📈 Results: {passed}/{total} test suites passed")
-    
-    if passed == total:
-        print("\n🎉 ALL TESTS PASSED!")
-        print("\n✨ Snippet functionality is ready for production!")
-        print("\nNext steps:")
-        print("1. Start server: uvicorn backend.app.main:app --reload")
-        print("2. Ingest repository: POST /ingest")
-        print("3. Query with snippets: POST /query")
-        print("4. Switch to GPT-4 by setting use_mock=False in RAGService")
-        return True
-    else:
-        print(f"\n❌ {total - passed} test suite(s) failed")
-        print("Please fix failing tests before deploying")
-        return False
-
-if __name__ == "__main__":
-    success = main()
-    sys.exit(0 if success else 1)
+    def generate_report(self) -> Dict[str, Any]:
+        """Generate comprehensive test report"""
+        total_duration = self.end_time - self.start_time if self.end_time and self.start_time else 0
+        
+        report = {
+            "timestamp": datetime.now().isoformat(),
+            "total_duration": total_duration,
+            "summary": {
+                "total_suites": len(self.test_suites),
+                "passed_suites": sum(1 for suite in self.test_suites if suite.result),
+                "failed_suites": sum(1 for suite in self.test_suites if suite.result is False),
+                "skipped_suites": sum(1 for suite in self.test_suites if suite.result is None),
+                "required_passed": sum(1 for suite in self.test_suites if suite.required and suite.result),
+                "required_total": sum(1 for suite in self.test_suites if suite.required)
+            },
+            "suites": []
+        }
+        
+        for suite in self.test_suites:
+            suite_report = {
+                "name": suite.name,
+                "description": suite.description,
+                "required": suite.required,
+                "result": suite.result,
+                "duration": suite.duration,
+                "output_length": len(suite.output) if suite.output else 0
+            }\n            report["suites"].append(suite_report)\n        \n        return report\n    \n    def print_summary(self, report: Dict[str, Any]):\n        \"\"\"Print test summary\"\"\"\n        print(f\"\\n{'='*80}\")\n        print(f\"🎯 MASTER TEST REPORT\")\n        print(f\"{'='*80}\")\n        print(f\"📅 Timestamp: {report['timestamp']}\")\n        print(f\"⏱️  Total Duration: {report['total_duration']:.1f} seconds\")\n        print(f\"\\n📊 SUMMARY:\")\n        print(f\"   Total Test Suites: {report['summary']['total_suites']}\")\n        print(f\"   ✅ Passed: {report['summary']['passed_suites']}\")\n        print(f\"   ❌ Failed: {report['summary']['failed_suites']}\")\n        print(f\"   ⏭️  Skipped: {report['summary']['skipped_suites']}\")\n        print(f\"   🎯 Required Passed: {report['summary']['required_passed']}/{report['summary']['required_total']}\")\n        \n        print(f\"\\n📋 DETAILED RESULTS:\")\n        for suite_report in report['suites']:\n            status_icon = \"✅\" if suite_report['result'] else \"❌\" if suite_report['result'] is False else \"⏭️\"\n            required_text = \"(Required)\" if suite_report['required'] else \"(Optional)\"\n            print(f\"   {status_icon} {suite_report['name']} {required_text} - {suite_report['duration']:.1f}s\")\n            print(f\"      {suite_report['description']}\")\n        \n        # Overall assessment\n        required_passed = report['summary']['required_passed']\n        required_total = report['summary']['required_total']\n        \n        print(f\"\\n🏆 OVERALL ASSESSMENT:\")\n        if required_passed == required_total:\n            print(\"   🎉 ALL REQUIRED TESTS PASSED!\")\n            print(\"   🚀 System is PRODUCTION READY!\")\n            if report['summary']['failed_suites'] > 0:\n                print(\"   ℹ️  Some optional tests failed, but core functionality is working\")\n        else:\n            print(\"   ⚠️  SOME REQUIRED TESTS FAILED\")\n            print(\"   🔧 Please fix issues before production deployment\")\n        \n        print(f\"{'='*80}\")\n    \n    def save_report(self, report: Dict[str, Any]):\n        \"\"\"Save report to file\"\"\"\n        try:\n            os.makedirs(\"test_reports\", exist_ok=True)\n            timestamp = datetime.now().strftime(\"%Y%m%d_%H%M%S\")\n            filename = f\"test_reports/test_report_{timestamp}.json\"\n            \n            with open(filename, 'w') as f:\n                json.dump(report, f, indent=2)\n            \n            print(f\"📄 Detailed report saved to: {filename}\")\n        except Exception as e:\n            print(f\"⚠️  Could not save report: {e}\")\n    \n    def run_all_tests(self) -> bool:\n        \"\"\"Run all test suites and return overall success\"\"\"\n        print(\"🧪 MASTER TEST RUNNER - CodeBase QA Agent\")\n        print(\"=\" * 80)\n        \n        # Check prerequisites\n        if not self.check_prerequisites():\n            print(\"❌ Prerequisites not met. Cannot run tests.\")\n            return False\n        \n        self.start_time = time.time()\n        \n        # Run each test suite\n        for suite in self.test_suites:\n            try:\n                self.run_test_suite(suite)\n            except KeyboardInterrupt:\n                print(f\"\\n🛑 Test suite {suite.name} interrupted by user\")\n                suite.result = None\n                break\n            except Exception as e:\n                print(f\"\\n💥 Unexpected error in {suite.name}: {e}\")\n                suite.result = False\n        \n        self.end_time = time.time()\n        \n        # Generate and display report\n        report = self.generate_report()\n        self.print_summary(report)\n        self.save_report(report)\n        \n        # Return overall success\n        required_passed = report['summary']['required_passed']\n        required_total = report['summary']['required_total']\n        return required_passed == required_total\n\ndef main():\n    \"\"\"Main entry point\"\"\"\n    runner = MasterTestRunner()\n    \n    try:\n        success = runner.run_all_tests()\n        return 0 if success else 1\n    except KeyboardInterrupt:\n        print(\"\\n🛑 Testing interrupted by user\")\n        return 1\n    except Exception as e:\n        print(f\"\\n💥 Unexpected error: {e}\")\n        return 1\n\nif __name__ == \"__main__\":\n    exit_code = main()\n    sys.exit(exit_code)

@@ -1,233 +1,187 @@
 """
-Code chunking utilities with syntax-aware chunking using tree-sitter.
+Code chunking utilities for processing source files.
 """
 
 import os
 import hashlib
+from typing import List, Optional
+from dataclasses import dataclass
 import tiktoken
-from typing import List, Tuple, Optional, Dict, Any
-from pathlib import Path
-import structlog
 
-logger = structlog.get_logger()
+# File extensions to process
+TEXT_EXTENSIONS = {
+    '.py', '.js', '.ts', '.tsx', '.jsx', '.java', '.kt', '.go', '.rb', '.rs', '.php', '.cs',
+    '.c', '.h', '.hpp', '.cc', '.cpp', '.m', '.mm', '.swift', '.sh', '.bash', '.zsh',
+    '.json', '.yml', '.yaml', '.toml', '.ini', '.cfg', '.env',
+    '.md', '.rst', '.txt', '.html', '.css', '.scss', '.sql'
+}
 
-# Try to import tree-sitter, fallback gracefully if not available
-try:
-    import tree_sitter
-    from tree_sitter import Language, Parser
-    TREE_SITTER_AVAILABLE = True
-except ImportError:
-    TREE_SITTER_AVAILABLE = False
-    logger.warning("tree-sitter not available, using fallback chunking")
+# Files to skip
+SKIP_PATTERNS = {
+    '.git', '.svn', '.hg', '__pycache__', '.pytest_cache', 'node_modules',
+    '.venv', 'venv', '.env', 'dist', 'build', '.next', '.nuxt',
+    'coverage', '.coverage', '.nyc_output', 'target', 'bin', 'obj'
+}
 
-from .config import settings
+# Maximum file size (1MB)
+MAX_FILE_SIZE = 1024 * 1024
 
 
+@dataclass
 class CodeChunk:
     """Represents a chunk of code with metadata."""
+    path: str
+    content: str
+    start_line: int
+    end_line: int
+    content_hash: str
+    language: Optional[str] = None
     
-    def __init__(
-        self,
-        content: str,
-        path: str,
-        start_line: int,
-        end_line: int,
-        language: str,
-        chunk_type: str = "unknown"
-    ):
-        self.content = content
-        self.path = path
-        self.start_line = start_line
-        self.end_line = end_line
-        self.language = language
-        self.chunk_type = chunk_type
-        self.content_hash = self._compute_hash()
-    
-    def _compute_hash(self) -> str:
-        """Compute hash of chunk content."""
-        return hashlib.md5(self.content.encode()).hexdigest()
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert chunk to dictionary."""
-        return {
-            "content": self.content,
-            "path": self.path,
-            "start_line": self.start_line,
-            "end_line": self.end_line,
-            "language": self.language,
-            "chunk_type": self.chunk_type,
-            "content_hash": self.content_hash
-        }
+    def __post_init__(self):
+        if not self.content_hash:
+            self.content_hash = hashlib.md5(self.content.encode()).hexdigest()
 
 
-class TreeSitterChunker:
-    """Syntax-aware chunking using tree-sitter."""
-    
-    def __init__(self):
-        self.parsers = {}
-        self._initialize_parsers()
-    
-    def _initialize_parsers(self):
-        """Initialize tree-sitter parsers for supported languages."""
-        if not TREE_SITTER_AVAILABLE:
-            return
-        
-        try:
-            # Initialize parsers for supported languages
-            languages = {
-                'python': 'tree_sitter_python',
-                'javascript': 'tree_sitter_javascript',
-                'typescript': 'tree_sitter_typescript'
-            }
-            
-            for lang, module in languages.items():
-                try:
-                    # This is a simplified approach - in production you'd build the language library
-                    parser = Parser()
-                    # Note: This would need proper tree-sitter language library setup
-                    # For now, we'll use the fallback chunker
-                    self.parsers[lang] = parser
-                except Exception as e:
-                    logger.warning(f"Failed to initialize parser for {lang}: {e}")
-                    
-        except Exception as e:
-            logger.error(f"Failed to initialize tree-sitter parsers: {e}")
-    
-    def chunk_file(self, file_path: str, content: str) -> List[CodeChunk]:
-        """Chunk a file using tree-sitter if available, otherwise fallback."""
-        if not TREE_SITTER_AVAILABLE:
-            return self._fallback_chunk_file(file_path, content)
-        
-        language = self._detect_language(file_path)
-        if language not in self.parsers:
-            return self._fallback_chunk_file(file_path, content)
-        
-        try:
-            return self._tree_sitter_chunk(file_path, content, language)
-        except Exception as e:
-            logger.warning(f"Tree-sitter chunking failed for {file_path}, using fallback: {e}")
-            return self._fallback_chunk_file(file_path, content)
-    
-    def _tree_sitter_chunk(self, file_path: str, content: str, language: str) -> List[CodeChunk]:
-        """Chunk using tree-sitter (placeholder implementation)."""
-        # This is a placeholder - in a full implementation, you would:
-        # 1. Parse the code with tree-sitter
-        # 2. Extract function/class definitions
-        # 3. Create chunks for each function/class
-        # 4. Handle nested structures appropriately
-        
-        # For now, return fallback chunking
-        return self._fallback_chunk_file(file_path, content)
-    
-    def _fallback_chunk_file(self, file_path: str, content: str) -> List[CodeChunk]:
-        """Fallback chunking using line-based windows."""
-        language = self._detect_language(file_path)
-        lines = content.split('\n')
-        
-        # Calculate chunk size in lines (approximate)
-        encoding = tiktoken.get_encoding("cl100k_base")
-        avg_tokens_per_line = 10  # Rough estimate
-        lines_per_chunk = max(1, settings.max_chunk_tokens // avg_tokens_per_line)
-        overlap_lines = max(1, settings.chunk_overlap_tokens // avg_tokens_per_line)
-        
-        chunks = []
-        
-        for i in range(0, len(lines), lines_per_chunk - overlap_lines):
-            end_line = min(i + lines_per_chunk, len(lines))
-            chunk_lines = lines[i:end_line]
-            chunk_content = '\n'.join(chunk_lines)
-            
-            # Skip empty chunks
-            if not chunk_content.strip():
-                continue
-            
-            chunk = CodeChunk(
-                content=chunk_content,
-                path=file_path,
-                start_line=i + 1,  # 1-indexed
-                end_line=end_line,
-                language=language,
-                chunk_type="line_window"
-            )
-            chunks.append(chunk)
-        
-        return chunks
-    
-    def _detect_language(self, file_path: str) -> str:
-        """Detect programming language from file extension."""
-        ext = Path(file_path).suffix.lower()
-        language_map = {
-            '.py': 'python',
-            '.js': 'javascript',
-            '.ts': 'typescript',
-            '.jsx': 'javascript',
-            '.tsx': 'typescript',
-            '.java': 'java',
-            '.cpp': 'cpp',
-            '.c': 'c',
-            '.go': 'go',
-            '.rs': 'rust',
-            '.php': 'php',
-            '.rb': 'ruby',
-            '.cs': 'csharp',
-            '.swift': 'swift',
-            '.kt': 'kotlin',
-            '.scala': 'scala'
-        }
-        return language_map.get(ext, 'unknown')
-
-
-def chunk_file(file_path: str, content: str) -> List[CodeChunk]:
-    """Main function to chunk a file."""
-    chunker = TreeSitterChunker()
-    return chunker.chunk_file(file_path, content)
-
-
-def is_text_file(file_path: str, content: bytes) -> bool:
-    """Check if a file is text-based."""
-    # Check file extension
-    text_extensions = {
-        '.py', '.js', '.ts', '.jsx', '.tsx', '.java', '.cpp', '.c', '.h', '.hpp',
-        '.go', '.rs', '.php', '.rb', '.cs', '.swift', '.kt', '.scala', '.md',
-        '.txt', '.json', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf',
-        '.sh', '.bash', '.zsh', '.fish', '.ps1', '.bat', '.cmd', '.sql',
-        '.html', '.css', '.scss', '.sass', '.less', '.xml', '.svg'
-    }
-    
-    ext = Path(file_path).suffix.lower()
-    if ext in text_extensions:
+def should_skip_file(file_path: str, file_size: int) -> bool:
+    """Check if a file should be skipped during processing."""
+    # Check file size
+    if file_size > MAX_FILE_SIZE:
         return True
     
-    # Check if content is text (simple heuristic)
+    # Check if path contains skip patterns
+    path_parts = file_path.lower().split(os.sep)
+    for part in path_parts:
+        if part in SKIP_PATTERNS:
+            return True
+        if part.startswith('.') and len(part) > 1:
+            return True
+    
+    return False
+
+
+def is_text_file(file_path: str, content_bytes: bytes) -> bool:
+    """Check if a file is likely to be a text file."""
+    # Check extension
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext in TEXT_EXTENSIONS:
+        return True
+    
+    # Check for binary content
+    if b'\x00' in content_bytes[:1024]:  # Check first 1KB for null bytes
+        return False
+    
+    # Check if mostly ASCII
     try:
-        content.decode('utf-8')
+        content_bytes.decode('utf-8')
         return True
     except UnicodeDecodeError:
         return False
 
 
-def should_skip_file(file_path: str, file_size: int) -> bool:
-    """Determine if a file should be skipped during ingestion."""
-    # Skip files that are too large
-    if file_size > settings.max_file_size_bytes:
-        return True
+def get_language_from_extension(file_path: str) -> Optional[str]:
+    """Get programming language from file extension."""
+    ext = os.path.splitext(file_path)[1].lower()
     
-    # Skip binary files and common build artifacts
-    skip_patterns = {
-        '.git', '.svn', '.hg', '.bzr',
-        'node_modules', 'vendor', 'dist', 'build', 'target',
-        '.venv', 'venv', 'env', '__pycache__',
-        '.DS_Store', 'Thumbs.db',
-        '.exe', '.dll', '.so', '.dylib', '.a', '.o',
-        '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.ico',
-        '.mp3', '.mp4', '.avi', '.mov', '.wmv',
-        '.zip', '.tar', '.gz', '.rar', '.7z',
-        '.pdf', '.doc', '.docx', '.xls', '.xlsx'
+    language_map = {
+        '.py': 'python',
+        '.js': 'javascript',
+        '.ts': 'typescript',
+        '.tsx': 'typescript',
+        '.jsx': 'javascript',
+        '.java': 'java',
+        '.kt': 'kotlin',
+        '.go': 'go',
+        '.rb': 'ruby',
+        '.rs': 'rust',
+        '.php': 'php',
+        '.cs': 'csharp',
+        '.c': 'c',
+        '.h': 'c',
+        '.hpp': 'cpp',
+        '.cc': 'cpp',
+        '.cpp': 'cpp',
+        '.m': 'objective-c',
+        '.mm': 'objective-c',
+        '.swift': 'swift',
+        '.sh': 'bash',
+        '.bash': 'bash',
+        '.zsh': 'zsh',
+        '.json': 'json',
+        '.yml': 'yaml',
+        '.yaml': 'yaml',
+        '.toml': 'toml',
+        '.ini': 'ini',
+        '.cfg': 'ini',
+        '.env': 'bash',
+        '.md': 'markdown',
+        '.rst': 'rst',
+        '.txt': 'text',
+        '.html': 'html',
+        '.css': 'css',
+        '.scss': 'scss',
+        '.sql': 'sql'
     }
     
-    file_path_lower = file_path.lower()
-    for pattern in skip_patterns:
-        if pattern in file_path_lower:
-            return True
+    return language_map.get(ext)
+
+
+def chunk_file(file_path: str, content: str, max_chunk_size: int = 1000) -> List[CodeChunk]:
+    """Chunk a file into smaller pieces for embedding."""
+    if not content.strip():
+        return []
     
-    return False
+    lines = content.split('\n')
+    chunks = []
+    
+    # Get language for syntax-aware chunking
+    language = get_language_from_extension(file_path)
+    
+    # Use tiktoken for token counting
+    try:
+        encoding = tiktoken.get_encoding("cl100k_base")
+    except Exception:
+        # Fallback to character-based chunking
+        encoding = None
+    
+    current_chunk = []
+    current_size = 0
+    start_line = 1
+    
+    for i, line in enumerate(lines, 1):
+        line_size = len(encoding.encode(line)) if encoding else len(line)
+        
+        # If adding this line would exceed max size, create a chunk
+        if current_chunk and current_size + line_size > max_chunk_size:
+            chunk_content = '\n'.join(current_chunk)
+            if chunk_content.strip():
+                chunks.append(CodeChunk(
+                    path=file_path,
+                    content=chunk_content,
+                    start_line=start_line,
+                    end_line=i - 1,
+                    content_hash="",  # Will be generated in __post_init__
+                    language=language
+                ))
+            
+            # Start new chunk
+            current_chunk = [line]
+            current_size = line_size
+            start_line = i
+        else:
+            current_chunk.append(line)
+            current_size += line_size
+    
+    # Add final chunk
+    if current_chunk:
+        chunk_content = '\n'.join(current_chunk)
+        if chunk_content.strip():
+            chunks.append(CodeChunk(
+                path=file_path,
+                content=chunk_content,
+                start_line=start_line,
+                end_line=len(lines),
+                content_hash="",  # Will be generated in __post_init__
+                language=language
+            ))
+    
+    return chunks

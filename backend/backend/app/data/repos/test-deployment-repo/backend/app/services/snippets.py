@@ -3,36 +3,12 @@ Snippet extraction service for retrieving code with surrounding context.
 """
 
 import os
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple
+import structlog
+
 from ..core.config import settings
 
-_TEXT_EXTS = {
-    ".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".kt", ".go", ".rb", ".rs", ".php", ".cs",
-    ".c", ".h", ".hpp", ".cc", ".cpp", ".m", ".mm", ".swift", ".sh", ".bash", ".zsh",
-    ".json", ".yml", ".yaml", ".toml", ".ini", ".cfg", ".env",
-    ".md", ".rst", ".txt", ".html", ".css", ".scss", ".sql"
-}
-
-
-def _is_probably_text(path: str, first_bytes: bytes) -> bool:
-    """Check if a file is likely to be text-based."""
-    if b"\x00" in first_bytes:
-        return False
-    ext = os.path.splitext(path)[1].lower()
-    if ext in _TEXT_EXTS:
-        return True
-    # Fallback: treat small ASCII-ish chunks as text
-    asciiish = sum(1 for b in first_bytes if 9 <= b <= 126 or b in (10, 13))
-    return asciiish / max(1, len(first_bytes)) > 0.85
-
-
-def _safe_repo_path(repo_id: str, rel_path: str) -> str:
-    """Safely construct repository file path preventing path traversal."""
-    root = os.path.abspath(os.path.join(settings.repos_dir, repo_id))
-    candidate = os.path.abspath(os.path.join(root, rel_path))
-    if not candidate.startswith(root + os.sep) and candidate != root:
-        raise ValueError("Path traversal detected")
-    return candidate
+logger = structlog.get_logger()
 
 
 def extract_snippet(
@@ -40,60 +16,163 @@ def extract_snippet(
     rel_path: str,
     start: int,
     end: int,
-    context_lines: int = None,
-    max_chars: int = None,
+    context_lines: int = None
 ) -> Optional[Tuple[int, int, str]]:
     """
-    Extract code snippet with surrounding context.
+    Extract a code snippet with surrounding context.
     
     Args:
         repo_id: Repository identifier
-        rel_path: Relative path to file within repository
-        start: Start line number (1-based inclusive)
-        end: End line number (1-based inclusive)
-        context_lines: Lines of context before/after
-        max_chars: Maximum characters to return
+        rel_path: Relative path to the file
+        start: Start line number (1-indexed)
+        end: End line number (1-indexed)
+        context_lines: Number of context lines before/after (default from settings)
     
     Returns:
-        Tuple of (window_start, window_end, code) or None if file not readable/text
+        Tuple of (window_start, window_end, code) or None if extraction fails
     """
-    context_lines = context_lines or settings.snippet_context_lines
-    max_chars = max_chars or settings.snippet_max_chars
-
-    abspath = _safe_repo_path(repo_id, rel_path)
-    if not os.path.exists(abspath) or not os.path.isfile(abspath):
-        return None
-
+    if context_lines is None:
+        context_lines = settings.snippet_context_lines
+    
     try:
-        # Check if file is text
-        with open(abspath, "rb") as f:
-            head = f.read(2048)
-            if not _is_probably_text(rel_path, head):
+        # Construct full file path
+        file_path = os.path.join(settings.repos_dir, repo_id, rel_path)
+        
+        # Security check: ensure path is within repo directory
+        repo_dir = os.path.join(settings.repos_dir, repo_id)
+        if not _is_safe_path(file_path, repo_dir):
+            logger.warning(f"Unsafe path detected: {file_path}")
+            return None
+        
+        # Check if file exists
+        if not os.path.exists(file_path):
+            logger.warning(f"File not found: {file_path}")
+            return None
+        
+        # Read file content
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+        except UnicodeDecodeError:
+            # Try with different encoding
+            try:
+                with open(file_path, 'r', encoding='latin-1') as f:
+                    lines = f.readlines()
+            except Exception as e:
+                logger.warning(f"Failed to read file {file_path}: {e}")
                 return None
         
-        # Read file lines
-        with open(abspath, "r", encoding="utf-8", errors="replace") as f:
-            lines: List[str] = f.readlines()
-    except Exception:
+        if not lines:
+            return None
+        
+        total_lines = len(lines)
+        
+        # Convert to 0-indexed
+        start_idx = max(0, start - 1)
+        end_idx = min(total_lines, end)
+        
+        # Calculate window with context
+        window_start = max(1, start - context_lines)
+        window_end = min(total_lines, end + context_lines)
+        
+        # Extract lines (convert back to 0-indexed for slicing)
+        window_start_idx = window_start - 1
+        window_end_idx = window_end
+        
+        snippet_lines = lines[window_start_idx:window_end_idx]
+        
+        # Join lines and ensure we don't exceed max chars
+        code = ''.join(snippet_lines)
+        
+        if len(code) > settings.snippet_max_chars:
+            # Truncate while trying to preserve line boundaries
+            truncated = code[:settings.snippet_max_chars]
+            last_newline = truncated.rfind('\n')
+            if last_newline > settings.snippet_max_chars * 0.8:  # If we can save most content
+                code = truncated[:last_newline + 1]
+            else:
+                code = truncated + '\n... (truncated)'
+        
+        return window_start, window_end, code
+        
+    except Exception as e:
+        logger.error(f"Failed to extract snippet from {rel_path}: {e}")
         return None
 
-    n = len(lines)
-    if n == 0:
-        return None
 
-    # Calculate context window
-    window_start = max(1, start - context_lines)
-    window_end = min(n, end + context_lines)
-
-    # Extract lines (convert to 0-based indexing)
-    block = "".join(lines[window_start-1:window_end])
+def _is_safe_path(file_path: str, base_dir: str) -> bool:
+    """
+    Check if the file path is safe (no directory traversal).
     
-    # Trim to max chars if needed
-    if len(block) > max_chars:
-        # Try to keep the center around the original [start,end]
-        keep = max_chars
-        head_keep = keep // 2
-        tail_keep = keep - head_keep
-        block = block[:head_keep] + "\n...\n" + block[-tail_keep:]
+    Args:
+        file_path: The file path to check
+        base_dir: The base directory that should contain the file
+    
+    Returns:
+        True if the path is safe, False otherwise
+    """
+    try:
+        # Resolve both paths to absolute paths
+        abs_file_path = os.path.abspath(file_path)
+        abs_base_dir = os.path.abspath(base_dir)
+        
+        # Check if the file path starts with the base directory
+        return abs_file_path.startswith(abs_base_dir + os.sep) or abs_file_path == abs_base_dir
+        
+    except Exception:
+        return False
 
-    return (window_start, window_end, block)
+
+def get_file_language(file_path: str) -> str:
+    """
+    Determine the programming language from file extension.
+    
+    Args:
+        file_path: Path to the file
+    
+    Returns:
+        Language identifier or 'text' if unknown
+    """
+    ext = os.path.splitext(file_path)[1].lower()
+    
+    language_map = {
+        '.py': 'python',
+        '.js': 'javascript',
+        '.ts': 'typescript',
+        '.tsx': 'typescript',
+        '.jsx': 'javascript',
+        '.java': 'java',
+        '.kt': 'kotlin',
+        '.go': 'go',
+        '.rb': 'ruby',
+        '.rs': 'rust',
+        '.php': 'php',
+        '.cs': 'csharp',
+        '.c': 'c',
+        '.h': 'c',
+        '.hpp': 'cpp',
+        '.cc': 'cpp',
+        '.cpp': 'cpp',
+        '.m': 'objective-c',
+        '.mm': 'objective-c',
+        '.swift': 'swift',
+        '.sh': 'bash',
+        '.bash': 'bash',
+        '.zsh': 'zsh',
+        '.json': 'json',
+        '.yml': 'yaml',
+        '.yaml': 'yaml',
+        '.toml': 'toml',
+        '.ini': 'ini',
+        '.cfg': 'ini',
+        '.env': 'bash',
+        '.md': 'markdown',
+        '.rst': 'rst',
+        '.txt': 'text',
+        '.html': 'html',
+        '.css': 'css',
+        '.scss': 'scss',
+        '.sql': 'sql'
+    }
+    
+    return language_map.get(ext, 'text')

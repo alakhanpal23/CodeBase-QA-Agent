@@ -37,7 +37,12 @@ export interface QueryRequest {
 }
 
 export interface IngestRequest {
-  repo_url?: string;
+  source: string;
+  url: string;
+  repo_id: string;
+  branch?: string;
+  include_globs?: string[];
+  exclude_globs?: string[];
 }
 
 export interface ChatMessage {

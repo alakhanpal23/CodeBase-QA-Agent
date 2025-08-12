@@ -92,15 +92,15 @@ class RAGService:
         else:
             answer = f"I found relevant code for your question. The retrieved snippets contain information from {len(retrieved_chunks)} files that may help answer your query."
         
-        # Create mock citations
+        # Create mock citations (limit to 3 for speed)
         citations = []
-        for chunk in retrieved_chunks:
+        for chunk in retrieved_chunks[:3]:  # Only process first 3 chunks
             citation = Citation(
                 path=chunk.get("path", "unknown"),
                 start=chunk.get("start_line", 1),
                 end=chunk.get("end_line", 10),
                 score=chunk.get("score", 0.8),
-                content=chunk.get("content", "")[:100] + "..." if chunk.get("content") else None
+                content=chunk.get("content", "")[:50] + "..." if chunk.get("content") else None  # Shorter content
             )
             citations.append(citation)
         

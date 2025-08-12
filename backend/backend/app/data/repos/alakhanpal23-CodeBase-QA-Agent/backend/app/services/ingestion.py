@@ -98,15 +98,19 @@ class IngestionService:
         if not request.url:
             raise ValueError("GitHub URL is required for GitHub ingestion")
         
+        # Create persistent directory for this repo
+        repo_storage_path = os.path.join(settings.repos_dir, request.repo_id)
+        os.makedirs(repo_storage_path, exist_ok=True)
+        
         with tempfile.TemporaryDirectory() as temp_dir:
-            repo_path = os.path.join(temp_dir, "repo")
+            temp_repo_path = os.path.join(temp_dir, "repo")
             
             try:
                 # Clone repository
                 logger.info(f"Cloning repository: {request.url}")
                 repo = git.Repo.clone_from(
                     request.url,
-                    repo_path,
+                    temp_repo_path,
                     branch=request.branch or "main",
                     depth=1  # Shallow clone for speed
                 )
@@ -114,8 +118,14 @@ class IngestionService:
                 commit_sha = repo.head.commit.hexsha
                 logger.info(f"Cloned repository, commit: {commit_sha}")
                 
-                # Process files
-                result = await self._process_files(repo_path, request)
+                # Copy files to persistent storage
+                import shutil
+                if os.path.exists(repo_storage_path):
+                    shutil.rmtree(repo_storage_path)
+                shutil.copytree(temp_repo_path, repo_storage_path, ignore=shutil.ignore_patterns('.git'))
+                
+                # Process files from persistent storage
+                result = await self._process_files(repo_storage_path, request)
                 result.commit_sha = commit_sha
                 
                 return result

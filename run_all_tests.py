@@ -83,7 +83,7 @@ class MasterTestRunner:
             print("⚠️  Frontend is not accessible (some tests will be skipped)")
         
         # Check Python dependencies
-        required_packages = ["requests", "concurrent.futures"]
+        required_packages = ["requests"]
         for package in required_packages:
             try:
                 __import__(package)
@@ -184,4 +184,112 @@ class MasterTestRunner:
                 "result": suite.result,
                 "duration": suite.duration,
                 "output_length": len(suite.output) if suite.output else 0
-            }\n            report["suites"].append(suite_report)\n        \n        return report\n    \n    def print_summary(self, report: Dict[str, Any]):\n        \"\"\"Print test summary\"\"\"\n        print(f\"\\n{'='*80}\")\n        print(f\"🎯 MASTER TEST REPORT\")\n        print(f\"{'='*80}\")\n        print(f\"📅 Timestamp: {report['timestamp']}\")\n        print(f\"⏱️  Total Duration: {report['total_duration']:.1f} seconds\")\n        print(f\"\\n📊 SUMMARY:\")\n        print(f\"   Total Test Suites: {report['summary']['total_suites']}\")\n        print(f\"   ✅ Passed: {report['summary']['passed_suites']}\")\n        print(f\"   ❌ Failed: {report['summary']['failed_suites']}\")\n        print(f\"   ⏭️  Skipped: {report['summary']['skipped_suites']}\")\n        print(f\"   🎯 Required Passed: {report['summary']['required_passed']}/{report['summary']['required_total']}\")\n        \n        print(f\"\\n📋 DETAILED RESULTS:\")\n        for suite_report in report['suites']:\n            status_icon = \"✅\" if suite_report['result'] else \"❌\" if suite_report['result'] is False else \"⏭️\"\n            required_text = \"(Required)\" if suite_report['required'] else \"(Optional)\"\n            print(f\"   {status_icon} {suite_report['name']} {required_text} - {suite_report['duration']:.1f}s\")\n            print(f\"      {suite_report['description']}\")\n        \n        # Overall assessment\n        required_passed = report['summary']['required_passed']\n        required_total = report['summary']['required_total']\n        \n        print(f\"\\n🏆 OVERALL ASSESSMENT:\")\n        if required_passed == required_total:\n            print(\"   🎉 ALL REQUIRED TESTS PASSED!\")\n            print(\"   🚀 System is PRODUCTION READY!\")\n            if report['summary']['failed_suites'] > 0:\n                print(\"   ℹ️  Some optional tests failed, but core functionality is working\")\n        else:\n            print(\"   ⚠️  SOME REQUIRED TESTS FAILED\")\n            print(\"   🔧 Please fix issues before production deployment\")\n        \n        print(f\"{'='*80}\")\n    \n    def save_report(self, report: Dict[str, Any]):\n        \"\"\"Save report to file\"\"\"\n        try:\n            os.makedirs(\"test_reports\", exist_ok=True)\n            timestamp = datetime.now().strftime(\"%Y%m%d_%H%M%S\")\n            filename = f\"test_reports/test_report_{timestamp}.json\"\n            \n            with open(filename, 'w') as f:\n                json.dump(report, f, indent=2)\n            \n            print(f\"📄 Detailed report saved to: {filename}\")\n        except Exception as e:\n            print(f\"⚠️  Could not save report: {e}\")\n    \n    def run_all_tests(self) -> bool:\n        \"\"\"Run all test suites and return overall success\"\"\"\n        print(\"🧪 MASTER TEST RUNNER - CodeBase QA Agent\")\n        print(\"=\" * 80)\n        \n        # Check prerequisites\n        if not self.check_prerequisites():\n            print(\"❌ Prerequisites not met. Cannot run tests.\")\n            return False\n        \n        self.start_time = time.time()\n        \n        # Run each test suite\n        for suite in self.test_suites:\n            try:\n                self.run_test_suite(suite)\n            except KeyboardInterrupt:\n                print(f\"\\n🛑 Test suite {suite.name} interrupted by user\")\n                suite.result = None\n                break\n            except Exception as e:\n                print(f\"\\n💥 Unexpected error in {suite.name}: {e}\")\n                suite.result = False\n        \n        self.end_time = time.time()\n        \n        # Generate and display report\n        report = self.generate_report()\n        self.print_summary(report)\n        self.save_report(report)\n        \n        # Return overall success\n        required_passed = report['summary']['required_passed']\n        required_total = report['summary']['required_total']\n        return required_passed == required_total\n\ndef main():\n    \"\"\"Main entry point\"\"\"\n    runner = MasterTestRunner()\n    \n    try:\n        success = runner.run_all_tests()\n        return 0 if success else 1\n    except KeyboardInterrupt:\n        print(\"\\n🛑 Testing interrupted by user\")\n        return 1\n    except Exception as e:\n        print(f\"\\n💥 Unexpected error: {e}\")\n        return 1\n\nif __name__ == \"__main__\":\n    exit_code = main()\n    sys.exit(exit_code)
+            }
+            report["suites"].append(suite_report)
+        
+        return report
+    
+    def print_summary(self, report: Dict[str, Any]):
+        """Print test summary"""
+        print(f"\n{'='*80}")
+        print(f"🎯 MASTER TEST REPORT")
+        print(f"{'='*80}")
+        print(f"📅 Timestamp: {report['timestamp']}")
+        print(f"⏱️  Total Duration: {report['total_duration']:.1f} seconds")
+        print(f"\n📊 SUMMARY:")
+        print(f"   Total Test Suites: {report['summary']['total_suites']}")
+        print(f"   ✅ Passed: {report['summary']['passed_suites']}")
+        print(f"   ❌ Failed: {report['summary']['failed_suites']}")
+        print(f"   ⏭️  Skipped: {report['summary']['skipped_suites']}")
+        print(f"   🎯 Required Passed: {report['summary']['required_passed']}/{report['summary']['required_total']}")
+        
+        print(f"\n📋 DETAILED RESULTS:")
+        for suite_report in report['suites']:
+            status_icon = "✅" if suite_report['result'] else "❌" if suite_report['result'] is False else "⏭️"
+            required_text = "(Required)" if suite_report['required'] else "(Optional)"
+            print(f"   {status_icon} {suite_report['name']} {required_text} - {suite_report['duration']:.1f}s")
+            print(f"      {suite_report['description']}")
+        
+        # Overall assessment
+        required_passed = report['summary']['required_passed']
+        required_total = report['summary']['required_total']
+        
+        print(f"\n🏆 OVERALL ASSESSMENT:")
+        if required_passed == required_total:
+            print("   🎉 ALL REQUIRED TESTS PASSED!")
+            print("   🚀 System is PRODUCTION READY!")
+            if report['summary']['failed_suites'] > 0:
+                print("   ℹ️  Some optional tests failed, but core functionality is working")
+        else:
+            print("   ⚠️  SOME REQUIRED TESTS FAILED")
+            print("   🔧 Please fix issues before production deployment")
+        
+        print(f"{'='*80}")
+    
+    def save_report(self, report: Dict[str, Any]):
+        """Save report to file"""
+        try:
+            os.makedirs("test_reports", exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"test_reports/test_report_{timestamp}.json"
+            
+            with open(filename, 'w') as f:
+                json.dump(report, f, indent=2)
+            
+            print(f"📄 Detailed report saved to: {filename}")
+        except Exception as e:
+            print(f"⚠️  Could not save report: {e}")
+    
+    def run_all_tests(self) -> bool:
+        """Run all test suites and return overall success"""
+        print("🧪 MASTER TEST RUNNER - CodeBase QA Agent")
+        print("=" * 80)
+        
+        # Check prerequisites
+        if not self.check_prerequisites():
+            print("❌ Prerequisites not met. Cannot run tests.")
+            return False
+        
+        self.start_time = time.time()
+        
+        # Run each test suite
+        for suite in self.test_suites:
+            try:
+                self.run_test_suite(suite)
+            except KeyboardInterrupt:
+                print(f"\n🛑 Test suite {suite.name} interrupted by user")
+                suite.result = None
+                break
+            except Exception as e:
+                print(f"\n💥 Unexpected error in {suite.name}: {e}")
+                suite.result = False
+        
+        self.end_time = time.time()
+        
+        # Generate and display report
+        report = self.generate_report()
+        self.print_summary(report)
+        self.save_report(report)
+        
+        # Return overall success
+        required_passed = report['summary']['required_passed']
+        required_total = report['summary']['required_total']
+        return required_passed == required_total
+
+def main():
+    """Main entry point"""
+    runner = MasterTestRunner()
+    
+    try:
+        success = runner.run_all_tests()
+        return 0 if success else 1
+    except KeyboardInterrupt:
+        print("\n🛑 Testing interrupted by user")
+        return 1
+    except Exception as e:
+        print(f"\n💥 Unexpected error: {e}")
+        return 1
+
+if __name__ == "__main__":
+    exit_code = main()
+    sys.exit(exit_code)

@@ -1,20 +1,50 @@
 version: '3.8'
 
 services:
-  codebase-qa:
-    build: .
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - INDEX_DIR=/app/backend/app/data/indexes
-      - META_DB_URI=sqlite:////app/backend/app/data/meta.sqlite
-      - TEMP_DIR=/app/backend/app/data/temp
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-dummy-key-for-testing}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - EMBED_MODE=${EMBED_MODE:-auto}
     volumes:
-      - ./backend/app/data:/app/backend/app/data
-    restart: unless-stopped
+      - ./backend/app/data:/app/app/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=http://backend:8000
+      - NEXT_PUBLIC_ENVIRONMENT=${ENVIRONMENT:-development}
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+volumes:
+  backend_data:

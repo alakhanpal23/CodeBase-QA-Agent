@@ -60,11 +60,11 @@ class QueryService:
                     latency_ms=latency_ms
                 )
             
-            # Retrieve relevant chunks
+            # Retrieve relevant chunks (optimized)
             retrieved_chunks = self.vector_store_manager.search_multiple(
                 request.repo_ids,
                 question_embedding,
-                request.k
+                min(request.k, 3)  # Limit to 3 chunks for speed
             )
             
             if not retrieved_chunks:

@@ -32,9 +32,10 @@ class Settings(BaseSettings):
     temp_dir: str = "backend/app/data/temp"
     
     # Chunking Configuration
-    max_chunk_tokens: int = 400
-    chunk_overlap_tokens: int = 120
-    max_file_size_bytes: int = 524288  # 500KB
+    max_chunk_tokens: int = 300  # Reduced for speed
+    chunk_overlap_tokens: int = 50   # Reduced for speed
+    max_file_size_bytes: int = 262144  # 250KB - smaller files
+    max_files_per_repo: int = 100      # Limit files for demo
     
     # API Configuration
     api_host: str = "0.0.0.0"
@@ -47,8 +48,12 @@ class Settings(BaseSettings):
     repos_dir: str = "backend/app/data/repos"  # base dir where repos are stored
     
     # Security
-    max_repo_size_mb: int = 100
+    max_repo_size_mb: int = 50   # Smaller repos for speed
     rate_limit_per_minute: int = 60
+    
+    # Performance
+    query_timeout_seconds: int = 5
+    ingestion_timeout_seconds: int = 30
     
     class Config:
         env_file = ".env"

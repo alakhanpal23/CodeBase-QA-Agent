@@ -77,14 +77,20 @@ class HealthResponse(BaseModel):
     timestamp: float = Field(..., description="Current timestamp")
 
 
+class Repository(BaseModel):
+    """Repository model."""
+    repo_id: str
+    name: str
+    file_count: int
+    chunk_count: int
+
+
 class StatsResponse(BaseModel):
     """Response model for service statistics."""
-    total_repos: int = Field(..., description="Total number of repositories")
-    total_files: int = Field(..., description="Total number of files indexed")
-    total_chunks: int = Field(..., description="Total number of chunks stored")
-    index_size_mb: float = Field(..., description="Index size in megabytes")
-    last_ingest_time: Optional[datetime] = Field(None, description="Last ingestion timestamp")
-    avg_query_latency_ms: Optional[float] = Field(None, description="Average query latency")
+    repositories: List[Repository]
+    total_repositories: int
+    total_files: int
+    total_chunks: int
 
 
 class ChunkMetadata(BaseModel):
@@ -108,3 +114,6 @@ class RepositoryInfo(BaseModel):
     chunks_count: int
     last_updated: datetime
     size_mb: float
+
+
+

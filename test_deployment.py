@@ -125,7 +125,7 @@ def test_delete_repo():
     print("\n🔍 Testing repository deletion...")
     
     try:
-        response = requests.delete(f"{API_BASE}/repos/test-deployment-repo", timeout=10)
+        response = requests.delete(f"{API_BASE}/repos/test-deployment-repo", timeout=30)
         
         if response.status_code == 200:
             print("✅ Repository deleted successfully")

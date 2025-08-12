@@ -1,28 +1,5 @@
-# Python
-__pycache__/
+frontend/node_modules/
+backend/__pycache__/
+backend/app/data/
 *.pyc
-*.pyo
-*.pyd
-*.sqlite3
-
-# Environment
 .env
-.env.*
-*.env
-
-# Data/Indexes
-backend/app/data/indexes/
-backend/app/data/*.db
-backend/app/data/*.faiss
-backend/app/data/*.json
-backend/app/data/*.jsonl
-
-# Logs
-*.log
-
-# VSCode/IDE
-.vscode/
-.idea/
-
-# MacOS
-.DS_Store

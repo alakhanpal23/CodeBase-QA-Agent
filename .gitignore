@@ -1,5 +1,35 @@
+# Dependencies
 frontend/node_modules/
 backend/__pycache__/
 backend/app/data/
 *.pyc
+*.pyo
+*.pyd
+__pycache__/
+
+# Environment files
 .env
+.env.local
+.env.production.local
+
+# Build outputs
+frontend/.next/
+frontend/out/
+backend/dist/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test reports
+test_reports/

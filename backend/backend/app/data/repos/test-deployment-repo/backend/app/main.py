@@ -64,17 +64,26 @@ stats_service = StatsService()
 async def startup_event():
     """Initialize services on startup."""
     logger.info("Starting Codebase QA Agent")
-    await ingestion_service.initialize()
-    await query_service.initialize()
-    await stats_service.initialize()
+    try:
+        await ingestion_service.initialize()
+        await query_service.initialize()
+        await stats_service.initialize()
+        logger.info("All services initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize services: {e}")
+        raise
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown."""
     logger.info("Shutting down Codebase QA Agent")
-    await ingestion_service.cleanup()
-    await query_service.cleanup()
+    try:
+        await ingestion_service.cleanup()
+        await query_service.cleanup()
+        logger.info("Services cleaned up successfully")
+    except Exception as e:
+        logger.error(f"Error during cleanup: {e}")
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -157,6 +166,29 @@ async def ingest_zip_file(
         raise HTTPException(status_code=500, detail=f"ZIP ingestion failed: {str(e)}")
 
 
+@app.get("/repos")
+async def get_repositories():
+    """Get list of all repositories."""
+    try:
+        repositories = await stats_service.get_repositories()
+        return repositories
+    except Exception as e:
+        logger.error("Failed to get repositories", error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve repositories")
+
+
+@app.delete("/repos/{repo_id}")
+async def delete_repository(repo_id: str):
+    """Delete a repository."""
+    try:
+        await ingestion_service.delete_repository(repo_id)
+        logger.info("Repository deleted", repo_id=repo_id)
+        return {"message": f"Repository {repo_id} deleted successfully"}
+    except Exception as e:
+        logger.error("Failed to delete repository", repo_id=repo_id, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to delete repository: {str(e)}")
+
+
 @app.post("/query", response_model=QueryResponse)
 async def query_codebase(request: QueryRequest):
     """Query the codebase with a natural language question."""
@@ -181,8 +213,8 @@ async def query_codebase(request: QueryRequest):
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     """Global exception handler."""
-    logger.error("Unhandled exception", error=str(exc), path=request.url.path)
+    logger.error("Unhandled exception", error=str(exc), path=str(request.url.path))
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error"}
+        content={"detail": "Internal server error", "error": str(exc)}
     )

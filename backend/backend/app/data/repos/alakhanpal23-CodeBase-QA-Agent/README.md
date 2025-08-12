@@ -1,154 +1,381 @@
-# Codebase QA Agent
+# 🤖 CodeBase QA Agent
 
-A backend service that ingests GitHub repositories, indexes source code, and answers natural-language questions about the codebase using Retrieval-Augmented Generation (RAG) with citations to file paths and line ranges.
+An AI-powered codebase question answering system that provides intelligent responses with code snippets, citations, and context.
 
-## Features
+## ✨ Features
 
-- **Repository Ingestion**: Clone GitHub repos or upload ZIP files
-- **Smart Chunking**: Syntax-aware code chunking using tree-sitter (with fallback to line-based chunking)
-- **Vector Search**: FAISS-based vector indexing with metadata filtering
-- **RAG-powered Q&A**: GPT-4 class model with deterministic, cited outputs
-- **REST API**: FastAPI endpoints for ingestion and querying
-- **CLI Tools**: Command-line interface for local operations
-- **Docker Support**: Containerized deployment
+- **🔍 Intelligent Code Search**: Vector-based semantic search through your codebase
+- **💬 Natural Language Queries**: Ask questions in plain English about your code
+- **📝 Code Snippets**: Get relevant code snippets with surrounding context
+- **🔗 Citations**: Precise file paths and line numbers for all references
+- **🎨 Modern UI**: Clean, responsive interface built with Next.js 14 and Tailwind CSS
+- **⚡ Fast Performance**: Optimized vector search with FAISS
+- **🔒 Secure**: Path traversal protection and input validation
+- **📊 Analytics**: Query performance metrics and usage statistics
 
-## Quick Start
+## 🏗️ Architecture
 
-### Local Development
+### Backend (FastAPI)
+- **FastAPI**: High-performance Python web framework
+- **Vector Search**: FAISS for efficient similarity search
+- **Embeddings**: Sentence Transformers for code vectorization
+- **RAG Pipeline**: Retrieval-Augmented Generation for intelligent answers
+- **Repository Management**: Git integration for automatic code ingestion
 
-1. **Clone and setup**:
+### Frontend (Next.js 14)
+- **Next.js 14**: React framework with App Router
+- **TypeScript**: Type-safe development
+- **Tailwind CSS**: Utility-first styling
+- **TanStack Query**: Data fetching and caching
+- **Zustand**: State management
+- **Monaco Editor**: Code syntax highlighting
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Python 3.8+
+- Node.js 18+
+- Git
+
+### Backend Setup
+
 ```bash
-git clone <your-repo>
-cd GithubDownloaderPersonal
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Navigate to backend
+cd backend
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Set environment variables
+export OPENAI_API_KEY="your-openai-key-or-dummy-for-mock"
+
+# Start the server
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-2. **Configure environment**:
+### Frontend Setup
+
 ```bash
-cp .env.example .env
-# Edit .env with your OpenAI API key
+# Navigate to frontend
+cd frontend
+
+# Install dependencies
+npm install
+
+# Create environment file
+cp .env.local.example .env.local
+
+# Start development server
+npm run dev
 ```
 
-3. **Run the service**:
-```bash
-uvicorn backend.app.main:app --reload
+### Access the Application
+- **Frontend**: http://localhost:3001
+- **Backend API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs
+
+## 📖 Usage
+
+### 1. Add Repositories
+1. Go to the **Repositories** page
+2. Enter a GitHub repository URL
+3. Click **Add Repository**
+4. Wait for ingestion to complete
+
+### 2. Ask Questions
+1. Go to the **Chat** page
+2. Select repositories from the sidebar
+3. Ask questions like:
+   - "How does authentication work?"
+   - "Show me the main API endpoints"
+   - "What database models are defined?"
+   - "How is error handling implemented?"
+
+### 3. View Results
+- **Answer**: AI-generated response with explanations
+- **Citations**: File paths and line numbers
+- **Code Snippets**: Relevant code with syntax highlighting
+- **Context**: Surrounding code for better understanding
+
+## 🔧 Configuration
+
+### Backend Configuration (`backend/app/core/config.py`)
+
+```python
+# OpenAI Configuration
+openai_api_key: str = "your-key-here"
+openai_model: str = "gpt-4"
+
+# Embedding Configuration
+embed_mode: str = "mock"  # Options: openai | mock
+embed_model: str = "all-MiniLM-L6-v2"
+
+# Storage Configuration
+index_dir: str = "backend/app/data/indexes"
+repos_dir: str = "backend/app/data/repos"
+
+# Snippet Configuration
+snippet_context_lines: int = 6
+snippet_max_chars: int = 1200
 ```
 
-### Docker
+### Frontend Configuration (`frontend/.env.local`)
 
 ```bash
-docker-compose up --build
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ```
 
-## Usage
+## 🧪 Testing
 
-### API Endpoints
-
-#### Ingest Repository
+### Run Backend Tests
 ```bash
-curl -X POST "http://localhost:8000/ingest" \
+cd backend
+python -m pytest tests/ -v
+```
+
+### Run Frontend Tests
+```bash
+cd frontend
+npm test
+```
+
+### Run Deployment Tests
+```bash
+# Make sure both backend and frontend are running
+python test_deployment.py
+```
+
+## 📊 API Endpoints
+
+### Repository Management
+- `GET /repos` - List all repositories
+- `POST /ingest` - Add a new repository
+- `DELETE /repos/{repo_id}` - Delete a repository
+
+### Query System
+- `POST /query` - Ask questions about the codebase
+- `GET /health` - Health check
+- `GET /stats` - System statistics
+
+### Example API Usage
+
+```bash
+# Add repository
+curl -X POST http://localhost:8000/ingest \
   -H "Content-Type: application/json" \
   -d '{
     "source": "github",
-    "url": "https://github.com/org/repo",
-    "branch": "main",
-    "repo_id": "org/repo",
-    "include_globs": ["**/*.py", "**/*.ts", "**/*.js"],
+    "url": "https://github.com/user/repo",
+    "repo_id": "my-repo",
+    "include_globs": ["**/*.py", "**/*.js"],
     "exclude_globs": [".git/**", "node_modules/**"]
   }'
-```
 
-#### Query Codebase
-```bash
-curl -X GET "http://localhost:8000/query" \
+# Query codebase
+curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
   -d '{
-    "question": "Where is JWT refresh implemented?",
-    "repo_ids": ["org/repo"],
-    "k": 6
+    "question": "How does authentication work?",
+    "repo_ids": ["my-repo"],
+    "k": 5
   }'
 ```
 
-#### Health Check
+## 🔒 Security Features
+
+- **Path Traversal Protection**: Prevents access to files outside repository directories
+- **Input Validation**: Comprehensive request validation with Pydantic
+- **CORS Configuration**: Configurable cross-origin resource sharing
+- **Rate Limiting**: Built-in request rate limiting
+- **File Size Limits**: Configurable maximum file and repository sizes
+
+## 🚀 Deployment
+
+### Quick Deployment
+
+**One-Command Deployment:**
 ```bash
+# Development
+./deploy.sh development
+
+# Production
+./deploy.sh production
+```
+
+### Manual Production Deployment
+
+#### Option 1: Docker Compose (Recommended)
+```bash
+# Clone the repository
+git clone https://github.com/alakhanpal23/CodeBase-QA-Agent.git
+cd CodeBase-QA-Agent
+
+# Set environment variables
+export OPENAI_API_KEY="your-openai-api-key"
+export ENVIRONMENT="production"
+
+# Deploy with Docker
+docker-compose up -d
+
+# Check status
+docker-compose ps
+```
+
+#### Option 2: Manual Setup
+
+**Backend:**
+```bash
+cd backend
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Set environment variables
+export OPENAI_API_KEY="your-openai-api-key"
+export ENVIRONMENT="production"
+export EMBED_MODE="auto"
+
+# Run with Gunicorn
+gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+```
+
+**Frontend:**
+```bash
+cd frontend
+
+# Install dependencies
+npm install
+
+# Build for production
+npm run build
+
+# Start production server
+npm start
+```
+
+### Environment Configuration
+
+#### Backend (.env)
+```bash
+# Required
+OPENAI_API_KEY=your-openai-api-key-here
+
+# Optional (with defaults)
+ENVIRONMENT=production
+EMBED_MODE=auto  # auto | openai | local | mock
+OPENAI_MODEL=gpt-4
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+```
+
+#### Frontend (.env.production.local)
+```bash
+NEXT_PUBLIC_API_BASE_URL=https://your-api-domain.com
+NEXT_PUBLIC_ENVIRONMENT=production
+```
+
+### Deployment Modes
+
+#### 🤖 Auto Mode (Recommended)
+- **With OpenAI API Key**: Uses OpenAI embeddings and GPT-4
+- **Without API Key**: Falls back to local embeddings and mock responses
+- **Perfect for**: Seamless transition from development to production
+
+#### 🔧 Manual Modes
+- **`openai`**: Force OpenAI (requires API key)
+- **`local`**: Use local sentence transformers
+- **`mock`**: Development/testing mode
+
+### Health Checks
+```bash
+# Backend health
 curl http://localhost:8000/health
+
+# Frontend health
+curl http://localhost:3000
+
+# Run comprehensive tests
+python test_deployment.py
 ```
 
-#### Statistics
-```bash
-curl http://localhost:8000/stats
-```
+## 🤝 Contributing
 
-### CLI Tools
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-#### Ingest Repository
-```bash
-python scripts/ingest_repo.py --url https://github.com/org/repo --branch main --repo org/repo
-```
+## 📝 License
 
-#### Query Codebase
-```bash
-python scripts/query.py --repo org/repo --q "Where is auth implemented?"
-```
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Configuration
+## 🙏 Acknowledgments
 
-Key environment variables in `.env`:
+- **OpenAI** for GPT models and embeddings
+- **Hugging Face** for Sentence Transformers
+- **Facebook Research** for FAISS vector search
+- **Vercel** for Next.js framework
+- **FastAPI** team for the excellent Python framework
 
-- `OPENAI_API_KEY`: Your OpenAI API key
-- `INDEX_DIR`: Directory for storing FAISS indexes
-- `META_DB_URI`: SQLite database URI for metadata
-- `EMBED_BATCH_SIZE`: Batch size for embedding computation
-- `MAX_CHUNK_TOKENS`: Maximum tokens per chunk
-- `CHUNK_OVERLAP_TOKENS`: Token overlap between chunks
+## 🔧 Production Checklist
 
-## Architecture
+### Before Deployment
+- [ ] Set `OPENAI_API_KEY` environment variable
+- [ ] Configure production API URL in frontend
+- [ ] Set up SSL certificates (if using HTTPS)
+- [ ] Configure firewall rules
+- [ ] Set up monitoring and logging
 
-### Components
+### After Deployment
+- [ ] Run health checks (`curl http://your-domain/health`)
+- [ ] Test repository ingestion
+- [ ] Test query functionality
+- [ ] Monitor resource usage
+- [ ] Set up backup procedures
 
-1. **Ingestion Pipeline**: Clones repos, filters files, chunks code, computes embeddings
-2. **Vector Store**: FAISS index with metadata mapping
-3. **RAG Engine**: Retrieves relevant chunks and generates answers with citations
-4. **API Layer**: FastAPI endpoints for ingestion and querying
-5. **CLI Tools**: Command-line interface for local operations
+## 🔒 Security Considerations
 
-### Data Flow
+- **API Keys**: Store securely, never commit to version control
+- **HTTPS**: Use SSL/TLS in production
+- **Rate Limiting**: Configure appropriate limits
+- **Input Validation**: All inputs are validated by Pydantic
+- **Path Traversal**: Protected against directory traversal attacks
+- **CORS**: Configure for your domain
 
-1. **Ingest**: GitHub URL/ZIP → Clone/Extract → Filter → Chunk → Embed → Index
-2. **Query**: Question → Embed → Retrieve → RAG → Answer with Citations
+## 📊 Monitoring
 
-## Testing
+### Key Metrics
+- Response times (`/health` endpoint)
+- Memory usage (embedding models can be large)
+- Disk usage (vector indexes and repositories)
+- API rate limits and usage
 
-Run the test suite:
+### Logs
+- Backend: Structured JSON logs with `structlog`
+- Frontend: Next.js built-in logging
+- Docker: `docker-compose logs [service]`
 
-```bash
-pytest tests/
-```
+## 📞 Support
 
-Test coverage includes:
-- Chunking logic (syntax-aware and fallback)
-- Vector store operations
-- RAG formatting and citation generation
-- API endpoints
+For support, please open an issue on GitHub or contact the development team.
 
-## Limitations
+### Common Issues
 
-- Maximum file size: 500KB per file
-- Supported languages: Python, TypeScript, JavaScript (extensible)
-- Requires OpenAI API key for embeddings and RAG
-- Local FAISS storage (no distributed indexing)
+**"No relevant code found"**
+- Check if repository was properly ingested
+- Verify repository has supported file types
+- Try rephrasing your question
 
-## Roadmap
+**Slow responses**
+- Check if using local embeddings (slower than OpenAI)
+- Monitor memory usage
+- Consider upgrading hardware
 
-- [ ] Multi-repo queries with weights
-- [ ] GitHub App integration with webhooks
-- [ ] Redis caching for repeated queries
-- [ ] Basic React UI
-- [ ] VSCode/Chrome extensions
-- [ ] Support for more programming languages
+**OpenAI API errors**
+- Verify API key is valid
+- Check API quota and billing
+- System will fall back to local/mock mode
 
-## License
+---
 
-MIT License
+**Built with ❤️ for developers who want to understand their code better**

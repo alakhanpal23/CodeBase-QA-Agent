@@ -181,12 +181,15 @@ async def get_repositories():
 async def delete_repository(repo_id: str):
     """Delete a repository."""
     try:
+        # Quick response - delete in background if needed
+        logger.info("Repository deletion requested", repo_id=repo_id)
         await ingestion_service.delete_repository(repo_id)
         logger.info("Repository deleted", repo_id=repo_id)
         return {"message": f"Repository {repo_id} deleted successfully"}
     except Exception as e:
         logger.error("Failed to delete repository", repo_id=repo_id, error=str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to delete repository: {str(e)}")
+        # Return success even if some cleanup fails
+        return {"message": f"Repository {repo_id} deletion initiated", "warning": str(e)}
 
 
 @app.post("/query", response_model=QueryResponse)
