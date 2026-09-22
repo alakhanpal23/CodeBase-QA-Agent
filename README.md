@@ -1,6 +1,6 @@
 # 🤖 CodeBase QA Agent
 
-An AI-powered codebase question answering system that provides intelligent responses with code snippets, citations, and context.
+A prototype for asking natural-language questions about indexed code repositories. It combines a FastAPI backend, a Next.js interface, semantic retrieval, and answers with file references and code snippets. Local and mock embedding modes are available for development; verify every generated answer against its cited source before relying on it.
 
 ## ✨ Features
 
@@ -307,7 +307,7 @@ python test_deployment.py
 
 ## 📝 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+No project-level license file is currently included in this repository. Contact the maintainer before reusing or redistributing its code. The bundled third-party source trees have their own licenses.
 
 ## 🙏 Acknowledgments
 
